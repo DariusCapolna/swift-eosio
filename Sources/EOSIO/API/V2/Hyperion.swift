@@ -96,7 +96,7 @@ public extension API.V2.Hyperion {
 
         public struct Token: Decodable {
             public let symbol: String
-            public let precision: UInt8
+            public let precision: UInt8?
             public let amount: Double
             public let contract: Name
         }
