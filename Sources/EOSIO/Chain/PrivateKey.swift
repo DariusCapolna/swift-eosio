@@ -49,7 +49,7 @@ public struct PrivateKey: Equatable, Hashable {
             }
             switch parts[1] {
             case "K1":
-                try self.init(fromK1Data: data)
+                try self.init(fromK1Data: [0x80] + data)
             default:
                 guard parts[1].count == 2, parts[1].uppercased() == parts[1] else {
                     throw Error.parsingFailed("Invalid key type")
@@ -172,8 +172,8 @@ private func isCanonicalK1(_ sig: Data) -> Bool {
 // MARK: Language extensions
 
 // not confirming to LosslessStringConvertible so that secrets can't be unintentionally printed
-extension PrivateKey {
-    public init?(_ wif: String) {
+public extension PrivateKey {
+    init?(_ wif: String) {
         guard let instance = try? PrivateKey(stringValue: wif) else {
             return nil
         }

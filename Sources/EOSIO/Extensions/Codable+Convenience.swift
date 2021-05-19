@@ -96,7 +96,7 @@ extension UnkeyedDecodingContainer {
             } else if let nestedArray = try? decodeNestedArray([Any].self) {
                 array.append(nestedArray)
             } else if let isValueNil = try? decodeNil(), isValueNil == true {
-                array.append(Optional<Any>.none as Any)
+                array.append(Any?.none as Any)
             } else {
                 throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: codingPath, debugDescription: "Unable to decode value"))
             }

@@ -79,10 +79,26 @@ open class Client {
     /// The clients user-agent string.
     static let userAgent = "swift-eosio/\(SWIFT_EOSIO_VERSION) (+https://github.com/greymass/swift-eosio)"
 
+    /// Underlying HTTP error contained by `Error.networkError` when the response data is in a unknown format.
+    public struct HTTPResponseError: LocalizedError {
+        public let response: HTTPURLResponse
+        public let data: Data
+
+        public var errorDescription: String? {
+            var rv = "HTTP \(response.statusCode)"
+            if let json = try? JSONSerialization.jsonObject(with: data, options: .allowFragments) {
+                rv += " (\(String(describing: json)))"
+            } else if self.data.count <= 1024, let text = String(bytes: data, encoding: .ascii) {
+                rv += " (\(text))"
+            }
+            return rv
+        }
+    }
+
     /// All errors `Client` can throw.
     public enum Error: LocalizedError {
         /// Unable to send request or invalid response from server.
-        case networkError(message: String, error: Swift.Error?)
+        case networkError(message: String, error: Swift.Error? = nil)
         /// Server responded with an error.
         case responseError(error: ResponseError)
         /// Unable to decode the result or encode the request params.
@@ -125,32 +141,39 @@ open class Client {
     }
 
     /// Resolve a URLSession dataTask to a `Response`.
-    internal func resolveResponse<T: Request>(for _: T, data: Data?, response: URLResponse?) -> Result<T.Response, Error> {
+    internal func resolveResponse<T: Request>(for type: T, data: Data?, response: URLResponse?) -> Result<T.Response, Error> {
         guard let response = response else {
-            return Result.failure(Error.networkError(message: "No response from server", error: nil))
+            return Result.failure(Error.networkError(message: "No response from server"))
         }
         guard let httpResponse = response as? HTTPURLResponse else {
-            return Result.failure(Error.networkError(message: "Not a HTTP response", error: nil))
+            return Result.failure(Error.networkError(message: "Not a HTTP response"))
         }
         guard let data = data else {
-            return Result.failure(Error.networkError(message: "Response body empty", error: nil))
+            return Result.failure(Error.networkError(message: "Response body empty"))
         }
-        let decoder = Client.JSONDecoder()
-        if httpResponse.statusCode > 299 {
-            do {
-                let error = try decoder.decode(ResponseError.self, from: data)
-                return Result.failure(Error.responseError(error: error))
-            } catch {
-                return Result.failure(Error.networkError(message: "Server responded with HTTP \(httpResponse.statusCode)", error: error))
+        do {
+            let rv = try decodeResponse(for: type, response: httpResponse, data: data)
+            return .success(rv)
+        } catch {
+            if let error = error as? Error {
+                return .failure(error)
+            } else {
+                return .failure(.codingError(message: "Unable to decode response", error: error))
             }
         }
-        let rv: T.Response
-        do {
-            rv = try decoder.decode(T.Response.self, from: data)
-        } catch {
-            return Result.failure(Error.codingError(message: "Unable to decode response", error: error))
+    }
+
+    /// Decode response fror request, subclasses can override this to implement additional parsing logic.
+    open func decodeResponse<T: Request>(for _: T, response: HTTPURLResponse, data: Data) throws -> T.Response {
+        let decoder = Client.JSONDecoder()
+        if response.statusCode > 299 {
+            if let error = try? decoder.decode(ResponseError.self, from: data) {
+                throw Error.responseError(error: error)
+            } else {
+                throw Error.networkError(message: "Unexpected error response", error: HTTPResponseError(response: response, data: data))
+            }
         }
-        return Result.success(rv)
+        return try decoder.decode(T.Response.self, from: data)
     }
 
     /// Send a request.
@@ -190,17 +213,17 @@ open class Client {
 // MARK: JSON Coding helpers
 
 extension Client {
-    static let dateEncoder = Foundation.JSONEncoder.DateEncodingStrategy.custom { (date, encoder) throws in
+    static let dateEncoder = Foundation.JSONEncoder.DateEncodingStrategy.custom { date, encoder throws in
         var container = encoder.singleValueContainer()
         try container.encode(TimePoint(date).stringValue)
     }
 
-    static let dataEncoder = Foundation.JSONEncoder.DataEncodingStrategy.custom { (data, encoder) throws in
+    static let dataEncoder = Foundation.JSONEncoder.DataEncodingStrategy.custom { data, encoder throws in
         var container = encoder.singleValueContainer()
         try container.encode(data.hexEncodedString())
     }
 
-    static let dateDecoder = Foundation.JSONDecoder.DateDecodingStrategy.custom { (decoder) -> Date in
+    static let dateDecoder = Foundation.JSONDecoder.DateDecodingStrategy.custom { decoder -> Date in
         let container = try decoder.singleValueContainer()
         guard let date = TimePoint(try container.decode(String.self))?.date else {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date")
@@ -208,7 +231,7 @@ extension Client {
         return date
     }
 
-    static let dataDecoder = Foundation.JSONDecoder.DataDecodingStrategy.custom { (decoder) -> Data in
+    static let dataDecoder = Foundation.JSONDecoder.DataDecodingStrategy.custom { decoder -> Data in
         let container = try decoder.singleValueContainer()
         return Data(hexEncoded: try container.decode(String.self))
     }

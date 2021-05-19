@@ -350,14 +350,19 @@ public struct SigningRequest: Equatable, Hashable {
 
     /// The unresolved transaction.
     public var transaction: Transaction {
-        let actions: [Action]
-        switch self.data.req {
-        case let .transaction(tx):
-            return tx
-        default:
-            actions = self.actions
+        get {
+            let actions: [Action]
+            switch self.data.req {
+            case let .transaction(tx):
+                return tx
+            default:
+                actions = self.actions
+            }
+            return Transaction(TransactionHeader.zero, actions: actions)
         }
-        return Transaction(TransactionHeader.zero, actions: actions)
+        set {
+            self.data.req = .transaction(newValue)
+        }
     }
 
     /// ABIs required to resolve this request.
@@ -778,7 +783,7 @@ public struct ResolvedSigningRequest: Hashable, Equatable {
     public let signer: PermissionLevel
     public private(set) var transaction: Transaction
 
-    fileprivate init(_ request: SigningRequest, _ signer: PermissionLevel, _ transaction: Transaction, _ chainId: ChainId?) {
+    public init(_ request: SigningRequest, _ signer: PermissionLevel, _ transaction: Transaction, _ chainId: ChainId?) {
         self.request = request
         self.signer = signer
         self.transaction = transaction
@@ -996,8 +1001,8 @@ public protocol TaposSource {
     var taposValues: (refBlockNum: UInt16, refBlockPrefix: UInt32, expiration: TimePointSec?) { get }
 }
 
-extension TaposSource {
-    public var transactionHeader: TransactionHeader {
+public extension TaposSource {
+    var transactionHeader: TransactionHeader {
         let values = self.taposValues
         return .init(
             expiration: values.expiration ?? TimePointSec(Date().addingTimeInterval(60)),
@@ -1094,12 +1099,12 @@ public enum ChainName: UInt8, CaseIterable, CustomStringConvertible {
     }
 }
 
-extension ChainId {
-    public init(_ name: ChainName) {
+public extension ChainId {
+    init(_ name: ChainName) {
         self = name.id
     }
 
-    public var name: ChainName {
+    var name: ChainName {
         for name in ChainName.allCases {
             if self == name.id {
                 return name

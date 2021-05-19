@@ -26,7 +26,7 @@ var mockSession = MockSession(
     resourcePath.appendingPathComponent("API", isDirectory: true),
     mode: env["MOCK_RECORD"] != nil ? .record : .replay
 )
-let nodeAddress = URL(string: "https://jungle.greymass.com")! // only used when recording
+let nodeAddress = URL(string: "https://jungle3.greymass.com")! // only used when recording
 let client = Client(address: nodeAddress, session: mockSession)
 
 final class APITests: XCTestCase {
@@ -115,8 +115,8 @@ final class APITests: XCTestCase {
         let req = API.V1.Chain.GetAccountsByAuthorizers(keys: [pubkey])
         let res = try! client.sendSync(req).get()
         XCTAssertEqual(res.accounts.first?.accountName, "jestasmobile")
-        XCTAssertEqual(res.accounts.first?.permissionName, "active")
-        XCTAssertEqual(res.accounts.first?.authorizer, .publicKey(pubkey))
+        XCTAssertEqual(res.accounts.first?.permissionName, "owner")
+        XCTAssertEqual(res.accounts.first?.authorizingKey, pubkey)
         XCTAssertEqual(res.accounts.first?.threshold, 1)
         XCTAssertEqual(res.accounts.first?.weight, 1)
     }
@@ -124,9 +124,9 @@ final class APITests: XCTestCase {
     func testGetAccountsByAuthorizersUsingAccount() {
         let req = API.V1.Chain.GetAccountsByAuthorizers(accounts: ["eosio"])
         let res = try! client.sendSync(req).get()
-        XCTAssertEqual(res.accounts.first?.accountName, "eosio.assert")
-        XCTAssertEqual(res.accounts.first?.permissionName, "active")
-        XCTAssertEqual(res.accounts.first?.authorizer, .permissionLevel("eosio@active"))
+        XCTAssertEqual(res.accounts.first?.accountName, "eosio.bpay")
+        XCTAssertEqual(res.accounts.first?.permissionName, "owner")
+        XCTAssertEqual(res.accounts.first?.authorizingAccount, "eosio@active")
         XCTAssertEqual(res.accounts.first?.threshold, 1)
         XCTAssertEqual(res.accounts.first?.weight, 1)
     }
@@ -224,6 +224,46 @@ final class APITests: XCTestCase {
         XCTAssertEqual(res.tokens.first?.contract, Name("eosio.token"))
     }
     
+    func testHyperionGetTransaction() throws {
+        let hyperClient = Client(
+            address: URL(string: "https://proton.cryptolions.io")!,
+            session: mockSession
+        )
+
+        struct TransferActionData: ABIDecodable {
+            let from: Name
+            let to: Name
+            let amount: Double
+            let symbol: String
+            let memo: String
+            let quantity: Asset
+        }
+
+        let req = API.V2.Hyperion.GetTransaction<TransferActionData>(TransactionId(stringLiteral: "9a36577425f7a91ccde75c68a541922877ca2ce206f7c8094247efaf953044a6"))
+
+        let res = try hyperClient.sendSync(req).get()
+        XCTAssertEqual(res.actions.count, 1)
+        XCTAssertEqual(res.actions.first?.timestamp, TimePoint(rawValue: 1_587_575_238_000_000))
+        XCTAssertEqual(res.actions.first?.blockNum, BlockNum(868))
+        XCTAssertEqual(res.actions.first?.trxId, TransactionId(stringLiteral: "9a36577425f7a91ccde75c68a541922877ca2ce206f7c8094247efaf953044a6"))
+        XCTAssertEqual(res.actions.first?.act.account, Name("eosio.token"))
+        XCTAssertEqual(res.actions.first?.act.name, Name("transfer"))
+        XCTAssertEqual(res.actions.first?.act.authorization.first, PermissionLevel(Name("adrop.proton"), Name("active")))
+        XCTAssertEqual(res.actions.first?.act.data.amount, 0.113)
+        XCTAssertEqual(res.actions.first?.act.data.symbol, "XPR")
+        XCTAssertEqual(res.actions.first?.act.data.quantity, Asset(stringLiteral: "0.1130 XPR"))
+        XCTAssertEqual(res.actions.first?.act.data.memo, "1587575237728391")
+        XCTAssertEqual(res.actions.first?.act.data.to, Name("protonwallet"))
+        XCTAssertEqual(res.actions.first?.act.data.from, Name("adrop.proton"))
+        XCTAssertEqual(res.actions.first?.notified.first, Name("eosio.token"))
+        XCTAssertEqual(res.actions.first?.cpuUsageUs, 301)
+        XCTAssertEqual(res.actions.first?.netUsageWords, 18)
+        XCTAssertEqual(res.actions.first?.globalSequence, 112_766)
+        XCTAssertEqual(res.actions.first?.producer, Name("protonabp"))
+        XCTAssertEqual(res.actions.first?.actionOrdinal, 1)
+        XCTAssertEqual(res.actions.first?.creatorActionOrdinal, 0)
+    }
+
     func testHyperionGetTransaction() throws {
         let hyperClient = Client(
             address: URL(string: "https://proton.cryptolions.io")!,
