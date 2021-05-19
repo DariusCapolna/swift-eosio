@@ -122,7 +122,7 @@ public extension API.V2.Hyperion {
             self.skip = skip
         }
     }
-
+    
     /// Get all actions belonging to the same transaction
     struct GetTransaction<T: ABIDecodable>: Request {
         public static var path: String { "/v2/history/get_transaction" }
@@ -132,6 +132,25 @@ public extension API.V2.Hyperion {
             public let actions: [ActionReceipt<T>]
         }
 
+        public var id: TransactionId
+
+        public enum CodingKeys: String, CodingKey {
+            case id = "id"
+        }
+
+        public init(_ transactionId: TransactionId) {
+            self.id = transactionId
+        }
+    }
+
+    /// Get all actions belonging to the same transaction
+    struct GetTransaction<T: ABIDecodable>: Request {
+        public static var path: String { "/v2/history/get_transaction" }
+        public static var method: String { "GET" }
+
+        public struct Response: Decodable {
+            public let actions: [ActionReceipt<T>]
+        }
         public var id: TransactionId
 
         public enum CodingKeys: String, CodingKey {
